@@ -129,7 +129,7 @@ uint16_t getADCVin(uint8_t sample) {
 #ifdef TIP2_TEMP_ADC1_CHANNEL
 // Both sets of contacts are read every cycle, an empty one reads close to full scale.
 // A T12 tip also touches the TS/SI contacts, so T12 takes priority and we only switch to TS/SI while idle.
-// If a tip is detected in both sets of contacts, it is likely a short and we mask output and dont allow drive until the short is removed.
+// If the T12 contacts read near 0, it is likely a short and we mask output and dont allow drive until the short is removed.
 static const uint16_t tipOpenThreshold     = (ADC_MAX_READING * 31) / 32;
 static const uint8_t  tipSwitchSampleCount = 16; // Readings in a row before changing state
 static uint8_t        activeTipChannel     = 0;
@@ -152,7 +152,9 @@ uint16_t getTipRawTemp(uint8_t sample) {
     channelRaw[0]   = (uint16_t)((hadc1.Instance->JDR1 + hadc1.Instance->JDR2) << 2);
     channelRaw[1]   = (uint16_t)((hadc1.Instance->JDR3 + hadc1.Instance->JDR4) << 2);
     t12SocketHasTip = channelRaw[0] < tipOpenThreshold;
-    if (t12SocketHasTip && channelRaw[1] < tipOpenThreshold) {
+    // Matches stock SEQURE V1.03 (disassembled): a T12 reading in range wins and the TS/SI contacts are
+    // ignored, since a seated T12 body touches them. Fault only if the T12 reads near 0 (stock: < 10/1023).
+    if (channelRaw[0] < ADC_MAX_READING / 100) {
       tipSocketsShorted = true; // Set immediately
       shortClearCount   = 0;
     } else if (tipSocketsShorted && ++shortClearCount >= tipSwitchSampleCount) {
